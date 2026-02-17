@@ -20,6 +20,8 @@ CREATE OR REPLACE FUNCTION get_user_access_paths(
 )
 RETURNS TABLE (
     USER_NAME                VARCHAR,
+    OBJECT_TYPE              VARCHAR,
+    OBJECT_FQN               VARCHAR,
     PRIVILEGE                VARCHAR,
     DIRECTLY_PRIVILEGED_ROLE VARCHAR,
     ROLE_GRANTED_TO_USER     VARCHAR,
@@ -96,6 +98,12 @@ $$
     -- Final: join to users and deduplicate
     SELECT DISTINCT
         u.grantee_name                                AS user_name,
+        UPPER(P_STARTING_POINT_TYPE)                  AS object_type,
+        CASE
+            WHEN UPPER(P_STARTING_POINT_TYPE) = 'ROLE'
+                THEN P_NAME
+            ELSE CONCAT_WS('.', P_DATABASE, P_SCHEMA, P_NAME)
+        END                                           AS object_fqn,
         rh.privilege,
         rh.root_role                                  AS directly_privileged_role,
         rh.current_role                               AS role_granted_to_user,

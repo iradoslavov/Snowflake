@@ -1,87 +1,128 @@
 --------------------------------------------------------------------------------
 -- user_access_roles.sql
 --
--- For a given object (table, view, etc.), returns every user who can access it
--- along with every role-hierarchy path from the privileged role to the user,
--- and the depth of each path.
+-- Table function that returns every user who can access a given object (or who
+-- holds a given role), together with every role-hierarchy path and its depth.
+--
+-- Two modes:
+--   1. OBJECT mode  – pass an object type (TABLE, VIEW, …) + its coordinates.
+--   2. ROLE mode    – pass 'ROLE' as the first argument + the role name.
 --
 -- Uses SNOWFLAKE.ACCOUNT_USAGE views (up to 2-hour latency).
--- Adjust the four SET parameters below before running.
+-- The calling role needs IMPORTED PRIVILEGES on the SNOWFLAKE database.
 --------------------------------------------------------------------------------
 
--- ============================================================================
--- Parameters – change these to match your target object
--- ============================================================================
-SET object_type     = 'TABLE';        -- TABLE, VIEW, SCHEMA, DATABASE, etc.
-SET object_database = 'MY_DB';        -- Database that contains the object
-SET object_schema   = 'MY_SCHEMA';    -- Schema that contains the object
-                                      -- (set to '' for DATABASE-level objects)
-SET object_name     = 'MY_TABLE';     -- Name of the object
-
--- ============================================================================
--- Query
--- ============================================================================
-WITH RECURSIVE
-
--- Step 1: Find roles that hold direct privileges on the target object
-base_grants AS (
-    SELECT
-        grantee_name  AS role_name,
-        privilege
-    FROM snowflake.account_usage.grants_to_roles
-    WHERE granted_on    = $object_type
-      AND table_catalog = $object_database
-      AND name          = $object_name
-      AND ($object_schema = '' OR table_schema = $object_schema)
-      AND deleted_on IS NULL
-),
-
--- Step 2: Recursively walk the role hierarchy upward.
---         If ROLE_A has the privilege and ROLE_B is granted ROLE_A,
---         then ROLE_B inherits the privilege (path: ROLE_A -> ROLE_B).
-role_hierarchy (current_role, root_role, privilege, role_path, depth) AS (
-
-    -- Anchor: the roles with direct privileges
-    SELECT
-        bg.role_name,
-        bg.role_name,
-        bg.privilege,
-        bg.role_name,
-        1
-    FROM base_grants bg
-
-    UNION ALL
-
-    -- Recursive: find every role that has been granted the current role
-    SELECT
-        g.grantee_name,
-        rh.root_role,
-        rh.privilege,
-        rh.role_path || ' -> ' || g.grantee_name,
-        rh.depth + 1
-    FROM role_hierarchy rh
-    JOIN snowflake.account_usage.grants_to_roles g
-        ON  g.granted_on  = 'ROLE'
-        AND g.name        = rh.current_role
-        AND g.deleted_on IS NULL
-    WHERE rh.depth < 20                       -- safety guard against cycles
+CREATE OR REPLACE FUNCTION get_user_access_paths(
+    P_STARTING_POINT_TYPE  VARCHAR,            -- 'ROLE', 'TABLE', 'VIEW', …
+    P_NAME                 VARCHAR,            -- object name  OR  role name
+    P_DATABASE             VARCHAR DEFAULT NULL,
+    P_SCHEMA               VARCHAR DEFAULT NULL
 )
+RETURNS TABLE (
+    USER_NAME                VARCHAR,
+    PRIVILEGE                VARCHAR,
+    DIRECTLY_PRIVILEGED_ROLE VARCHAR,
+    ROLE_GRANTED_TO_USER     VARCHAR,
+    ACCESS_PATH              VARCHAR,
+    PATH_DEPTH               INTEGER
+)
+AS
+$$
+    WITH RECURSIVE
 
--- Step 3: Join to users who hold any role in the hierarchy
-SELECT
-    u.grantee_name                                   AS user_name,
-    rh.privilege,
-    rh.root_role                                     AS directly_privileged_role,
-    rh.current_role                                  AS role_granted_to_user,
-    rh.role_path || ' -> ' || u.grantee_name         AS access_path,
-    rh.depth + 1                                     AS path_depth
-FROM role_hierarchy rh
-JOIN snowflake.account_usage.grants_to_users u
-    ON  u.role       = rh.current_role
-    AND u.deleted_on IS NULL
-ORDER BY
-    user_name,
-    privilege,
-    path_depth,
-    access_path
+    -- Pre-deduplicated role-to-role grants (removes duplicates caused by
+    -- multiple grantors, GRANT OPTION differences, etc.)
+    role_grants AS (
+        SELECT DISTINCT
+            name         AS child_role,
+            grantee_name AS parent_role
+        FROM snowflake.account_usage.grants_to_roles
+        WHERE granted_on  = 'ROLE'
+          AND deleted_on IS NULL
+    ),
+
+    -- Seed rows – depends on the starting-point mode
+    base_grants AS (
+
+        -- Mode 1: start from a ROLE directly
+        SELECT
+            P_NAME       AS role_name,
+            'MEMBERSHIP' AS privilege
+        WHERE UPPER(P_STARTING_POINT_TYPE) = 'ROLE'
+
+        UNION ALL
+
+        -- Mode 2: start from an object – find roles with direct privileges
+        SELECT DISTINCT
+            grantee_name AS role_name,
+            privilege
+        FROM snowflake.account_usage.grants_to_roles
+        WHERE UPPER(P_STARTING_POINT_TYPE) != 'ROLE'
+          AND granted_on    = UPPER(P_STARTING_POINT_TYPE)
+          AND name          = P_NAME
+          AND (P_DATABASE IS NULL OR table_catalog = P_DATABASE)
+          AND (P_SCHEMA   IS NULL OR table_schema  = P_SCHEMA)
+          AND deleted_on IS NULL
+    ),
+
+    -- Recursively walk the role hierarchy upward.
+    -- ROLE_A (has privilege) -> ROLE_B (inherits) -> … -> terminal role
+    role_hierarchy (current_role, root_role, privilege, role_path, depth) AS (
+
+        -- Anchor
+        SELECT
+            role_name,
+            role_name,
+            privilege,
+            role_name,
+            1
+        FROM base_grants
+
+        UNION ALL
+
+        -- Recursive step: find parent roles that inherit the current role
+        SELECT
+            rg.parent_role,
+            rh.root_role,
+            rh.privilege,
+            rh.role_path || ' -> ' || rg.parent_role,
+            rh.depth + 1
+        FROM role_hierarchy rh
+        JOIN role_grants rg
+            ON rg.child_role = rh.current_role
+        WHERE rh.depth < 20                         -- guard against cycles
+    )
+
+    -- Final: join to users and deduplicate
+    SELECT DISTINCT
+        u.grantee_name                                AS user_name,
+        rh.privilege,
+        rh.root_role                                  AS directly_privileged_role,
+        rh.current_role                               AS role_granted_to_user,
+        rh.role_path || ' -> ' || u.grantee_name      AS access_path,
+        rh.depth + 1                                  AS path_depth
+    FROM role_hierarchy rh
+    JOIN snowflake.account_usage.grants_to_users u
+        ON  u.role       = rh.current_role
+        AND u.deleted_on IS NULL
+$$
 ;
+
+--------------------------------------------------------------------------------
+-- Usage examples
+--------------------------------------------------------------------------------
+
+-- Object mode: all users with any privilege on a specific table
+SELECT *
+FROM TABLE(get_user_access_paths('TABLE', 'MY_TABLE', 'MY_DB', 'MY_SCHEMA'))
+ORDER BY user_name, privilege, path_depth;
+
+-- Object mode: database-level (no schema needed)
+SELECT *
+FROM TABLE(get_user_access_paths('DATABASE', 'MY_DB'))
+ORDER BY user_name, privilege, path_depth;
+
+-- Role mode: all users who hold (directly or via hierarchy) a given role
+SELECT *
+FROM TABLE(get_user_access_paths('ROLE', 'DATA_ANALYST'))
+ORDER BY user_name, path_depth;

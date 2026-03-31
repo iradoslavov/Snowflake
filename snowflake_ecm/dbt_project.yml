@@ -1,0 +1,35 @@
+name: 'snowflake_ecm'
+version: '1.0.0'
+config-version: 2
+
+profile: 'snowflake_ecm'
+
+model-paths:  ["models"]
+macro-paths:  ["macros"]
+seed-paths:   ["seeds"]
+test-paths:   ["tests"]
+target-path:  "target"
+clean-targets: ["target", "dbt_packages"]
+
+# ---------------------------------------------------------------------------
+# Global variable — override at run-time with: dbt run --vars 'as_of_date: 2024-01-15'
+# Defaults to today when not supplied.
+# ---------------------------------------------------------------------------
+vars:
+  as_of_date: "{{ run_started_at.strftime('%Y-%m-%d') }}"
+
+models:
+  snowflake_ecm:
+
+    staging:
+      +materialized: ephemeral          # No physical tables — compiled inline
+
+    intermediate:
+      +database: dev_curate
+      +schema: core
+      +materialized: incremental
+
+    marts:
+      +database: dev_publish
+      +schema: public
+      +materialized: table              # Full overwrite every run (= INSERT OVERWRITE)

@@ -1,0 +1,30 @@
+# Copy this file to ~/.dbt/profiles.yml and fill in your credentials.
+# Do NOT commit secrets to source control.
+
+snowflake_ecm:
+  target: dev
+  outputs:
+    dev:
+      type: snowflake
+      account: "{{ env_var('SNOWFLAKE_ACCOUNT') }}"
+      user: "{{ env_var('SNOWFLAKE_USER') }}"
+      password: "{{ env_var('SNOWFLAKE_PASSWORD') }}"   # or use authenticator: externalbrowser
+      role: "{{ env_var('SNOWFLAKE_ROLE', 'TRANSFORMER') }}"
+      warehouse: "{{ env_var('SNOWFLAKE_WAREHOUSE', 'TRANSFORM_WH') }}"
+      database: dev_curate                              # default target DB
+      schema: core                                      # default target schema
+      threads: 4
+      client_session_keep_alive: false
+      query_tag: dbt_snowflake_ecm
+
+    prod:
+      type: snowflake
+      account: "{{ env_var('SNOWFLAKE_ACCOUNT') }}"
+      user: "{{ env_var('SNOWFLAKE_USER') }}"
+      password: "{{ env_var('SNOWFLAKE_PASSWORD') }}"
+      role: "{{ env_var('SNOWFLAKE_ROLE', 'TRANSFORMER') }}"
+      warehouse: "{{ env_var('SNOWFLAKE_WAREHOUSE', 'TRANSFORM_WH') }}"
+      database: dev_curate
+      schema: core
+      threads: 8
+      query_tag: dbt_snowflake_ecm

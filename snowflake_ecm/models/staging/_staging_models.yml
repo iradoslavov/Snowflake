@@ -1,0 +1,33 @@
+version: 2
+
+models:
+  - name: stg_adc_ids
+    description: >
+      Bridge table mapping external client identifiers (LoanX IDs and ELD private IDs)
+      to Aladdin IDs. Ephemeral — inlined as a CTE wherever referenced.
+    columns:
+      - name: identifier
+        description: External client identifier
+      - name: aladdin_id
+        description: Corresponding Aladdin security ID
+
+  - name: stg_aladdin_base
+    description: >
+      Shared base subquery for all three ALADDIN entity models.
+      Joins active positions → security master → issuers → ultimate parent.
+      Exposes rn_company / rn_issuer / rn_security row-number filters.
+
+  - name: stg_ilevel_base
+    description: >
+      Shared base subquery for iLEVEL company, deal, and security models.
+      Joins VIEW_PERIODIC_DATA with the fn_ilevel UDTF for borrower/sponsor attributes.
+
+  - name: stg_levpro_base
+    description: >
+      Shared base subquery for LEVPRO company, deal, and security models.
+      Joins funded positions with latest primary deals.
+
+  - name: stg_salesforce_company
+    description: >
+      Salesforce Account records, excluding deleted and person accounts.
+      Carries firmographic attributes in a flat structure.

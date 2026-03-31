@@ -1,0 +1,106 @@
+version: 2
+
+models:
+
+  # ── *_v3 staging tables ────────────────────────────────────────────────────
+
+  - name: int_aladdin_company_v3
+    description: ALADDIN slice of dev_curate.core.company_v3 for as_of_date.
+    config:
+      alias: company_v3
+
+  - name: int_aladdin_issuer_v3
+    description: ALADDIN slice of dev_curate.core.issuer_v3 for as_of_date.
+    config:
+      alias: issuer_v3
+
+  - name: int_aladdin_security_v3
+    description: ALADDIN slice of dev_curate.core.security_v3 for as_of_date.
+    config:
+      alias: security_v3
+
+  - name: int_ilevel_company_v3
+    description: iLEVEL slice of dev_curate.core.company_v3 for as_of_date.
+    config:
+      alias: company_v3
+
+  - name: int_ilevel_deal_v3
+    description: iLEVEL slice of dev_curate.core.deal_v3 for as_of_date.
+    config:
+      alias: deal_v3
+
+  - name: int_ilevel_security_v3
+    description: iLEVEL slice of dev_curate.core.security_v3 for as_of_date.
+    config:
+      alias: security_v3
+
+  - name: int_levpro_company_v3
+    description: LEVPRO slice of dev_curate.core.company_v3 for as_of_date.
+    config:
+      alias: company_v3
+
+  - name: int_levpro_deal_v3
+    description: LEVPRO slice of dev_curate.core.deal_v3 for as_of_date.
+    config:
+      alias: deal_v3
+
+  - name: int_levpro_security_v3
+    description: LEVPRO slice of dev_curate.core.security_v3 for as_of_date.
+    config:
+      alias: security_v3
+
+  - name: int_salesforce_company_v3
+    description: Salesforce slice of dev_curate.core.company_v3 for as_of_date.
+    config:
+      alias: company_v3
+
+  # ── ECM ID registries ──────────────────────────────────────────────────────
+
+  - name: int_ecm_company_ids
+    description: >
+      Persistent company ID registry. Append-only incremental merge — once a
+      (source_system, source_company_id) pair is assigned an ecm_company_id
+      (UUID) it is never updated.
+    config:
+      alias: ecm_company_ids
+    columns:
+      - name: ecm_company_id
+        description: Stable canonical company UUID
+        tests:
+          - not_null
+      - name: source_system
+        tests:
+          - not_null
+      - name: source_company_id
+        tests:
+          - not_null
+
+  - name: int_ecm_issuer_ids
+    description: Persistent issuer ID registry (ALADDIN only — issuers are Aladdin-sourced).
+    config:
+      alias: ecm_issuer_ids
+
+  - name: int_ecm_deal_ids
+    description: Persistent deal ID registry (iLEVEL + LEVPRO).
+    config:
+      alias: ecm_deal_ids
+
+  - name: int_ecm_security_ids
+    description: Persistent security ID registry (ALADDIN + iLEVEL + LEVPRO).
+    config:
+      alias: ecm_security_ids
+
+  # ── Matching ───────────────────────────────────────────────────────────────
+
+  - name: int_company_matches_v3
+    description: >
+      Two-pass company matching result.
+      Pass 1 — exact ALADDIN_ID / CLIENT_ID linkage across ALADDIN / iLEVEL / LEVPRO.
+      Pass 2 — Jaro-Winkler fuzzy name match (>=99) to SALESFORCE.
+    config:
+      alias: company_matches_v3
+    columns:
+      - name: match_rank
+        description: >
+          Rank 1 = best match per (source_system, source_company_id, target_system).
+          Use WHERE match_rank = 1 for the canonical link.

@@ -1,0 +1,89 @@
+version: 2
+
+sources:
+
+  # ---------------------------------------------------------------------------
+  # BlackRock Aladdin — external share
+  # ---------------------------------------------------------------------------
+  - name: aladdin_share
+    database: blackrock_eldmuse2sf_aladdindb_share
+    schema: INVESTMENTS
+    tables:
+      - name: security_private_ids
+        identifier: SECURITY_PRIVATE_IDS
+      - name: security_public_ids
+        identifier: SECURITY_PUBLIC_IDS
+      - name: security_master
+        identifier: SECURITY_MASTER
+      - name: pos_analytics
+        identifier: pos_analytics
+      - name: issuers
+        identifier: ISSUERS
+      - name: port_group
+        identifier: PORT_GROUP
+
+  # ---------------------------------------------------------------------------
+  # iLevel — Maranon production
+  # ---------------------------------------------------------------------------
+  - name: ilevel
+    database: ilevel_maranon_production
+    schema: ilvl_schema
+    tables:
+      - name: view_periodic_data
+        identifier: VIEW_PERIODIC_DATA
+
+  # ---------------------------------------------------------------------------
+  # LevPro — raw
+  # ---------------------------------------------------------------------------
+  - name: levpro
+    database: prod_raw
+    schema: levpro
+    tables:
+      - name: vw_latest_funded_positions
+        identifier: VW_LATEST_FUNDED_POSITIONS
+      - name: vw_latest_primary_deals_old
+        identifier: VW_LATEST_PRIMARY_DEALS_OLD
+
+  # ---------------------------------------------------------------------------
+  # Salesforce ECM
+  # ---------------------------------------------------------------------------
+  - name: salesforce_ecm
+    database: SCF_BI_RAW
+    schema: SALESFORCE_ECM_RAW
+    tables:
+      - name: account
+        identifier: ACCOUNT
+
+  # ---------------------------------------------------------------------------
+  # Curate core — persistent ID registries (written by int_ecm_* models,
+  # read here as sources by the *_v3 intermediate models to look up
+  # previously-assigned ECM IDs without creating a circular ref() dependency).
+  # ---------------------------------------------------------------------------
+  - name: curate_core
+    database: dev_curate
+    schema: core
+    tables:
+      - name: ecm_company_ids
+      - name: ecm_issuer_ids
+      - name: ecm_deal_ids
+      - name: ecm_security_ids
+
+  # ---------------------------------------------------------------------------
+  # Publish layer (read-back for issuer/security resolution)
+  # ---------------------------------------------------------------------------
+  - name: publish
+    database: dev_publish
+    schema: public
+    tables:
+      - name: company
+      - name: deal
+
+  # ---------------------------------------------------------------------------
+  # iLevel UDTF (dev_raw)
+  # ---------------------------------------------------------------------------
+  - name: dev_raw_ilevel
+    database: DEV_RAW
+    schema: ILEVEL
+    tables:
+      - name: fn_ilevel_maranon_all_periods
+        identifier: FN_ILEVEL_MARANON_ALL_PERIODS

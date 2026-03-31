@@ -1,0 +1,97 @@
+version: 2
+
+models:
+
+  - name: mart_company
+    description: >
+      Canonical company publish table. Priority: iLEVEL-primary →
+      LEVPRO-only → ALADDIN-only. Cross-system IDs are pivoted into columns.
+    config:
+      alias: company
+    columns:
+      - name: ecm_company_id
+        tests:
+          - unique
+          - not_null
+      - name: as_of_date
+        tests:
+          - not_null
+
+  - name: mart_issuer
+    description: >
+      Issuer publish table derived from Aladdin issuer hierarchy,
+      linked to the canonical company via the company_matches cross-walk.
+    config:
+      alias: issuer
+    columns:
+      - name: ecm_issuer_id
+        tests:
+          - unique
+          - not_null
+
+  - name: mart_deal
+    description: >
+      Deal publish table. iLEVEL is the system of record; LEVPRO deals are
+      cross-referenced or carried as standalone if not matched to iLEVEL.
+    config:
+      alias: deal
+    columns:
+      - name: ecm_deal_id
+        tests:
+          - unique
+          - not_null
+
+  - name: mart_security
+    description: >
+      Security publish table. Aladdin is the spine; iLEVEL and LEVPRO IDs
+      are joined on aladdin_id. Deal linkage preferring iLEVEL over LEVPRO.
+    config:
+      alias: security
+    columns:
+      - name: ecm_security_id
+        tests:
+          - unique
+          - not_null
+      - name: aladdin_id
+        tests:
+          - not_null
+
+  - name: mart_deal_ext
+    description: >
+      Extended deal attributes from the iLevel UDTF (business description,
+      deal team, covenants, etc.).
+    config:
+      alias: deal_ext
+    columns:
+      - name: ecm_deal_id
+        tests:
+          - unique
+          - not_null
+
+  - name: mart_company_financials
+    description: >
+      LTM/L3M/Monthly waterfall financials per company from iLevel.
+      Covers the most recent 12 months relative to CURRENT_DATE().
+    config:
+      alias: company_financials
+    columns:
+      - name: ecm_company_id
+        tests:
+          - not_null
+      - name: period_end
+        tests:
+          - not_null
+
+  - name: mart_pos_analytics_latest
+    description: >
+      Latest 2-business-day Aladdin position snapshot for ELD_ALL portfolio group.
+    config:
+      alias: pos_analytics_latest
+
+  - name: mart_sf_account
+    description: >
+      Clean view of Salesforce Account with snake_case column aliases.
+      Excludes deleted and person accounts.
+    config:
+      alias: sf_account
+      materialized: view
